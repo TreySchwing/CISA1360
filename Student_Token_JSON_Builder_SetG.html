@@ -1,0 +1,42 @@
+<!doctype html><meta charset="utf-8"><title>Student Token + submission.json Builder (Set G)</title>
+<style>body{font-family:system-ui,Segoe UI,Roboto,Arial;margin:24px;max-width:900px}.card{border:1px solid #e5e7eb;border-radius:12px;padding:16px;margin:12px 0}label{display:block;margin-top:8px}input,select,textarea{width:100%;padding:9px;border:1px solid #e5e7eb;border-radius:10px}button{padding:9px 13px;border:1px solid #e5e7eb;border-radius:10px;background:#fff;cursor:pointer}.small{font-size:12px;color:#666}.ok{color:#0a7a2f;font-weight:600}.err{color:#b00020;font-weight:600;white-space:pre-wrap}</style>
+<h1>Student Token + submission.json Builder — Set G</h1>
+<div class="card"><p>Fill the fields below. If your Secret ID is 64 hex chars, paste it; otherwise leave blank (your instructor will verify against the embedded map).</p></div>
+<div class="card">
+<label>Student ID <input id="student_id" placeholder="A01234567"></label>
+<label>Set <input id="set" value="G"></label>
+<label>Module <input id="module" placeholder="M01"></label>
+<label>Artifact <input id="artifact" placeholder="Lab01"></label>
+<label>Attempt <input id="attempt" value="A1"></label>
+<label>Projector Code <input id="projector" placeholder="e.g., CQ79-DBX3-JP8F-VP25"></label>
+<label>Secret ID (hex-64, optional) <input id="secret"></label>
+<label>Notes (optional)<textarea id="notes" rows="3" placeholder="Reflection / context notes"></textarea></label>
+<button id="make">Generate Token + Download submission.json</button>
+<div id="out"></div>
+</div>
+<script>
+function textEnc(s){ return new TextEncoder().encode(s); }
+async function hmacSha256Bytes(keyBytes, msgBytes){ const key = await crypto.subtle.importKey('raw', keyBytes, {name:'HMAC', hash:'SHA-256'}, false, ['sign']); const sig = await crypto.subtle.sign('HMAC', key, msgBytes); return new Uint8Array(sig); }
+function base32(buf){ const alphabet='ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'; let bits=0, value=0, output=''; for(let i=0;i<buf.length;i++){ value=(value<<8)|buf[i]; bits+=8; while(bits>=5){ output+=alphabet[(value>>> (bits-5)) & 31]; bits-=5; } } if(bits>0){ output+=alphabet[(value<<(5-bits)) & 31]; } return output; }
+function formatToken(arr){ const t = base32(arr).slice(0,30); return t.match(/.{1,5}/g).slice(0,6).join('-'); }
+function hexToBytes(hex){ const clean = hex.replace(/[^0-9a-fA-F]/g,''); if(clean.length%2!==0) return null; const bytes = new Uint8Array(clean.length/2); for(let i=0;i<bytes.length;i++){ bytes[i]=parseInt(clean.substr(i*2,2),16); } return bytes; }
+document.getElementById("make").addEventListener("click", async ()=>{
+  const out=document.getElementById("out"); out.innerHTML="";
+  const student_id = document.getElementById("student_id").value.trim();
+  const set = document.getElementById("set").value.trim();
+  const module = document.getElementById("module").value.trim();
+  const artifact = document.getElementById("artifact").value.trim();
+  const attempt = document.getElementById("attempt").value.trim();
+  const projector = document.getElementById("projector").value.trim();
+  const secretStr = document.getElementById("secret").value.trim();
+  if(!student_id||!set||!module||!artifact||!attempt||!projector){ out.innerHTML = "<div class='err'>Please fill all required fields.</div>"; return; }
+  let keyBytes = null; if(secretStr){ const hb = hexToBytes(secretStr); keyBytes = hb || textEnc(secretStr); } else { keyBytes = textEnc("NO_SECRET_PROVIDED"); }
+  const msg = module+"|"+artifact+"|"+set+"|"+attempt+"|"+projector;
+  const mac = await hmacSha256Bytes(keyBytes, textEnc(msg));
+  const token = formatToken(mac);
+  const submission = { student_id, set, module, artifact, attempt, timestamp_local: new Date().toISOString(), token, inputs: { projector_code: projector, secret_id: secretStr || "" }, notes: document.getElementById("notes").value || "" };
+  const blob = new Blob([JSON.stringify(submission, null, 2)], {type:"application/json"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download = student_id+"_"+module+"_"+artifact+"_submission.json"; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+  out.innerHTML = "<div class='ok'>submission.json downloaded. Upload this file AND your evidence folder (code, tests_report.txt, activity_log.csv, screenshot_1.png) to D2L.</div>";
+});
+</script>
